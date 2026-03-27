@@ -1,0 +1,5 @@
+# Block all search engines from indexing this site
+# This is a private business application
+
+User-agent: *
+Disallow: /
