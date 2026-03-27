@@ -64,8 +64,8 @@ export function handleMockRequest(
 
   // ── Auth ──────────────────────────────────────────────────
   if (seg0 === 'auth' && seg1 === 'login') {
-    // Accept any credentials — log in as admin
-    const user = USERS[0]
+    const email = (body as any)?.email || ''
+    const user = USERS.find(u => u.email === email) || USERS[0]
     return ok({ token: 'demo-token-atlas', user })
   }
   if (seg0 === 'auth' && seg1 === 'me') {
@@ -106,6 +106,22 @@ export function handleMockRequest(
         { status: 'PENDING',   count: 5,  percentage: 10 },
       ],
     })
+  }
+  if (seg0 === 'orders' && seg1 === 'returns' && seg2 === 'suivi') {
+    const returned = ORDERS.filter(o => o.status === 'RETURNED' || o.status === 'SHIPPED')
+    const retourOrders = returned.map(o => ({
+      ...o,
+      etat: o.status === 'RETURNED' ? 'recu' : 'en_route',
+      returnRecordCount: 1,
+      itemCount: o.items.length,
+      cathedisReturns: [{ id: `cr-${o.id}`, trackingNumber: o.deliveryTrackingNumber || 'ATL-RET', status: 'RETURNED', createdAt: o.updatedAt }],
+    }))
+    return {
+      success: true,
+      data: retourOrders,
+      counts: { all: retourOrders.length, en_route: retourOrders.filter(o => o.etat === 'en_route').length, recu: retourOrders.filter(o => o.etat === 'recu').length },
+      pagination: { total: retourOrders.length, page: 1, limit: 20, totalPages: 1 },
+    }
   }
   if (seg0 === 'orders' && seg1 === 'returns' && seg2 === 'analytics') {
     const returned = ORDERS.filter(o => o.status === 'RETURNED')
@@ -173,7 +189,17 @@ export function handleMockRequest(
 
   // ── Delivery ──────────────────────────────────────────────
   if (seg0 === 'delivery' && seg1 === 'cities') {
-    return ok(['Casablanca', 'Rabat', 'Marrakech', 'Fès', 'Tanger', 'Agadir', 'Salé', 'Témara', 'Meknès', 'Oujda'])
+    const cities = [
+      { id: 1, cityName: 'Casablanca', sectors: [{ id: 1, sectorName: 'Maarif' }, { id: 2, sectorName: 'Ain Diab' }, { id: 3, sectorName: 'Hay Mohammadi' }, { id: 4, sectorName: 'Ain Chock' }] },
+      { id: 2, cityName: 'Rabat',      sectors: [{ id: 5, sectorName: 'Agdal' }, { id: 6, sectorName: 'Hassan' }, { id: 7, sectorName: 'Hay Riad' }] },
+      { id: 3, cityName: 'Marrakech',  sectors: [{ id: 8, sectorName: 'Gueliz' }, { id: 9, sectorName: 'Hivernage' }] },
+      { id: 4, cityName: 'Fès',        sectors: [{ id: 10, sectorName: 'Narjiss' }, { id: 11, sectorName: 'Hay Ryad' }] },
+      { id: 5, cityName: 'Tanger',     sectors: [{ id: 12, sectorName: 'Centre' }, { id: 13, sectorName: 'Malabata' }] },
+      { id: 6, cityName: 'Agadir',     sectors: [{ id: 14, sectorName: 'Centre' }, { id: 15, sectorName: 'Hay Dakhla' }] },
+      { id: 7, cityName: 'Salé',       sectors: [{ id: 16, sectorName: 'Tabriquet' }] },
+      { id: 8, cityName: 'Meknès',     sectors: [{ id: 17, sectorName: 'Centre' }] },
+    ]
+    return ok(cities)
   }
   if (seg0 === 'delivery') {
     return ok({ message: 'Commande envoyée en livraison', trackingNumber: 'ATL-DEMO' })
@@ -238,9 +264,13 @@ export function handleMockRequest(
     return ok(PRODUCTS)
   }
   if (seg0 === 'products' && seg1 === 'manual' && seg2 === 'counts') {
-    const counts: Record<string, number> = {}
+    // Stock page expects { [category]: { count: number, stock: number } }
+    const counts: Record<string, { count: number; stock: number }> = {}
     for (const p of PRODUCTS) {
-      counts[p.category] = (counts[p.category] || 0) + 1
+      const key = p.category.toLowerCase()
+      if (!counts[key]) counts[key] = { count: 0, stock: 0 }
+      counts[key].count += 1
+      counts[key].stock += STOCK.filter(s => s.productId === p.id).reduce((sum, s) => sum + s.quantity, 0)
     }
     return ok(counts)
   }
@@ -351,6 +381,40 @@ export function handleMockRequest(
         period: { startDate: '2026-02-25', endDate: '2026-03-27' },
         stores: storesSummary,
         totals: { salesCount: totalCount, salesAmount: totalAmount, returnsCount: 4, avgBasket: totalCount ? Math.round(totalAmount / totalCount) : 0 },
+      })
+    }
+    if (seg1 === 'analytics' && seg2) {
+      // Used by /magasins/[store-slug] page — /in-store-sales/analytics/:storeId
+      const store = STORES.find(s => s.id === seg2) || STORES[0]
+      const sales = POS_DAILY_SUMMARY.filter(s => s.storeId === store.id)
+      const totalAmount = sales.reduce((sum, s) => sum + s.totalRevenue, 0)
+      const totalCount = sales.reduce((sum, s) => sum + s.totalSales, 0)
+      return ok({
+        period: { startDate: '2026-02-25', endDate: '2026-03-27' },
+        sales: { count: totalCount, totalAmount, totalDiscount: 0, avgBasket: totalCount ? Math.round(totalAmount / totalCount) : 0 },
+        returns: { count: 3, byCondition: [{ condition: 'Bon état', count: 2 }, { condition: 'Défectueux', count: 1 }] },
+        byPaymentMethod: [
+          { method: 'CASH', count: Math.floor(totalCount * 0.65), amount: Math.floor(totalAmount * 0.65) },
+          { method: 'CARD', count: Math.floor(totalCount * 0.35), amount: Math.floor(totalAmount * 0.35) },
+        ],
+        topProducts: [
+          { productName: 'SLIM NOIR',        quantity: 42, revenue: 10500 },
+          { productName: 'BAGGY BLEACH',      quantity: 35, revenue: 9450  },
+          { productName: 'VESTE CARGO KAKI',  quantity: 28, revenue: 9800  },
+          { productName: 'REGULAR INDIGO',    quantity: 24, revenue: 6240  },
+          { productName: 'ENSEMBLE SPORT',    quantity: 18, revenue: 8640  },
+        ],
+        dailySales: sales.map(s => ({ date: s.date, count: s.totalSales, amount: s.totalRevenue })),
+        recentSales: sales.slice(0, 10).map((s, i) => ({
+          id: `sale-${i}`,
+          saleNumber: `VTE-${String(i + 1).padStart(3, '0')}`,
+          totalAmount: s.totalRevenue / (s.totalSales || 1),
+          paymentMethod: i % 3 === 0 ? 'CARD' : 'CASH',
+          itemCount: 2,
+          createdAt: s.date + 'T14:30:00Z',
+          createdBy: 'Samira Ouazzani',
+          items: [{ productName: 'SLIM NOIR', shortCode: 'SL-NOI', size: '32', length: '32', quantity: 1 }],
+        })),
       })
     }
     if (seg1 === 'summary') {

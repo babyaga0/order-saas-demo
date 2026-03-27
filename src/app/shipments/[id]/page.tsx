@@ -278,7 +278,7 @@ export default function ShipmentDetailPage() {
                 </p>
                 {shipment.createdBy && (
                   <p className="text-sm text-gray-600 mt-1">
-                    Par {shipment.createdBy.fullName}
+                    Par {shipment?.createdBy?.fullName}
                   </p>
                 )}
               </div>

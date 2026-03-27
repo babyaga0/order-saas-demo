@@ -570,7 +570,7 @@ export default function AinSebaaPage() {
 
                           {/* Items */}
                           <div className="space-y-2 mb-3">
-                            {sale.items.map((item) => (
+                            {sale.items?.map((item) => (
                               <div
                                 key={item.id}
                                 className="flex items-center justify-between text-sm"
