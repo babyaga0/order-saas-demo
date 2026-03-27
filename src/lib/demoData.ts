@@ -533,28 +533,41 @@ export const NOTIFICATIONS = [
 // ── POS Store Products (for useProductCache) ──────────────────
 
 export function getPOSProducts(storeId: string) {
-  const storeStock = STOCK.filter(s => s.storeId === storeId && s.quantity > 0)
+  const storeStock = STOCK.filter(s => s.storeId === storeId)
   const productMap = new Map<number, any>()
 
   for (const s of storeStock) {
     if (!productMap.has(s.productId)) {
       const p = PRODUCTS.find(pr => pr.id === s.productId)!
+      const basePrice = p.category === 'Accessoires' ? 70 : p.category === 'Vestes' ? 330 : p.category === 'Ensembles' ? 480 : 250
       productMap.set(s.productId, {
-        id: p.id,
-        name: p.name,
+        productId: p.id,
+        productName: p.name,
         shortCode: p.shortCode,
-        category: p.category,
-        price: p.category === 'Accessoires' ? 70 : p.category === 'Vestes' ? 330 : p.category === 'Ensembles' ? 480 : 250,
-        stock: [],
+        imageUrl: null,
+        basePrice,
+        totalStock: 0,
+        variations: [],
       })
     }
-    productMap.get(s.productId).stock.push({
-      id: s.id,
-      variationId: s.productVariationId,
-      size: s.productVariation?.size || null,
-      length: s.productVariation?.length || null,
-      quantity: s.quantity,
-    })
+    const entry = productMap.get(s.productId)!
+    const p = PRODUCTS.find(pr => pr.id === s.productId)!
+    if (s.productVariationId === null) {
+      // Accessory — no variation
+      entry.totalStock += s.quantity
+    } else {
+      const sizePart = s.productVariation?.size ? `-${s.productVariation.size}` : ''
+      const lenPart = s.productVariation?.length ? `-${s.productVariation.length}` : ''
+      entry.variations.push({
+        variationId: s.productVariationId,
+        shortCode: `${p.shortCode}${sizePart}${lenPart}`,
+        size: s.productVariation?.size || '',
+        length: s.productVariation?.length || '',
+        price: entry.basePrice,
+        stock: s.quantity,
+      })
+      entry.totalStock += s.quantity
+    }
   }
 
   return Array.from(productMap.values())
