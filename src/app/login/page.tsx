@@ -2,7 +2,6 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import api from '@/lib/api';
 
 export default function LoginPage() {
@@ -52,7 +51,7 @@ export default function LoginPage() {
             const storeSlug = storeName.toLowerCase().replace(/\s+/g, '-');
             window.location.href = `/pos/${storeSlug}`;
           } else {
-            window.location.href = '/pos/ain-sebaa';
+            window.location.href = '/pos/casablanca-centre';
           }
         } else {
           router.push('/dashboard');
@@ -86,14 +85,11 @@ export default function LoginPage() {
         <div className="card">
           {/* Logo */}
           <div className="flex justify-center mb-8">
-            <div className="relative w-32 h-24">
-              <Image
-                src="/logo-2.webp"
-                alt="Logo"
-                fill
-                className="object-contain"
-                priority
-              />
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
+                <span className="text-white font-black text-2xl">AD</span>
+              </div>
+              <span className="text-2xl font-black text-gray-800 tracking-wide">ATLAS DENIM</span>
             </div>
           </div>
 
