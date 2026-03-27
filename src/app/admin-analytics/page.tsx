@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import { useLayout } from '@/contexts/LayoutContext';
 import { Toaster, toast } from 'react-hot-toast';
 import DateRangePicker from '@/components/DateRangePicker';
+import api from '@/lib/api';
 
 interface StaffPerformance {
   id: string;
@@ -139,30 +140,13 @@ export default function AdminAnalyticsPage() {
         return;
       }
 
-      let url = `${process.env.NEXT_PUBLIC_API_URL}/orders/admin-analytics?period=${period}`;
-
+      let params = `period=${period}`;
       if (period === 'custom' && customStartDate && customEndDate) {
-        url += `&startDate=${customStartDate.toISOString()}&endDate=${customEndDate.toISOString()}`;
+        params += `&startDate=${customStartDate.toISOString()}&endDate=${customEndDate.toISOString()}`;
       }
 
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          toast.error('Session expirée. Veuillez vous reconnecter.');
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          router.push('/login');
-          return;
-        }
-        throw new Error(data.message || 'Failed to fetch analytics');
-      }
+      const response = await api.get(`/orders/admin-analytics?${params}`);
+      const data = response.data;
 
       // Ensure all arrays have default values
       const analyticsData = data.data;

@@ -41,6 +41,18 @@ function parsePath(url: string): { path: string; params: URLSearchParams } {
   }
 }
 
+// Normalize production request fields to match what the page expects
+function normalizePR(pr: any) {
+  return {
+    ...pr,
+    title: pr.notes || pr.requestNumber,
+    createdBy: pr.requestedBy,
+    destinationStore: pr.targetStore,
+    estimatedQuantity: pr.items.reduce((s: number, i: any) => s + i.requestedQty, 0),
+    dueDate: null,
+  }
+}
+
 export function handleMockRequest(
   method: string,
   url: string,
@@ -95,7 +107,45 @@ export function handleMockRequest(
       ],
     })
   }
-  if (seg0 === 'orders' && seg1 && !['stats', 'analytics', 'admin-analytics', 'all'].includes(seg1)) {
+  if (seg0 === 'orders' && seg1 === 'returns' && seg2 === 'analytics') {
+    const returned = ORDERS.filter(o => o.status === 'RETURNED')
+    return ok({
+      summary: {
+        totalReturns: returned.length,
+        totalReturnAmount: returned.reduce((s, o) => s + o.totalAmount, 0),
+        averageReturnValue: returned.length ? Math.round(returned.reduce((s, o) => s + o.totalAmount, 0) / returned.length) : 0,
+        returnRate: 8,
+        pendingRegistration: 1,
+      },
+      returnsByDeliveryStatus: [
+        { status: 'Retourné', count: 2 },
+        { status: 'Livré', count: 1 },
+      ],
+      returnsByReturnStatus: [
+        { status: 'RETURNED_TO_STORE', count: 2 },
+        { status: 'PROCESSED', count: 1 },
+      ],
+      returnsByCity: [
+        { city: 'Casablanca', count: 2 },
+        { city: 'Tanger', count: 1 },
+      ],
+      returnsByMonth: [
+        { month: 'Oct 2025', count: 1 },
+        { month: 'Nov 2025', count: 0 },
+        { month: 'Déc 2025', count: 2 },
+        { month: 'Jan 2026', count: 1 },
+        { month: 'Fév 2026', count: 0 },
+        { month: 'Mar 2026', count: 2 },
+      ],
+      recentReturns: returned.map(o => ({
+        ...o,
+        returnStatus: 'RETURNED_TO_STORE',
+        deliveryStatus: 'RETURNED',
+        createdBy: 'Fatima Benali',
+      })),
+    })
+  }
+  if (seg0 === 'orders' && seg1 && !['stats', 'analytics', 'admin-analytics', 'all', 'returns'].includes(seg1)) {
     // Single order by ID
     const order = ORDERS.find(o => o.id === seg1) || ORDERS[0]
     return ok(order)
@@ -122,6 +172,9 @@ export function handleMockRequest(
   }
 
   // ── Delivery ──────────────────────────────────────────────
+  if (seg0 === 'delivery' && seg1 === 'cities') {
+    return ok(['Casablanca', 'Rabat', 'Marrakech', 'Fès', 'Tanger', 'Agadir', 'Salé', 'Témara', 'Meknès', 'Oujda'])
+  }
   if (seg0 === 'delivery') {
     return ok({ message: 'Commande envoyée en livraison', trackingNumber: 'ATL-DEMO' })
   }
@@ -131,7 +184,41 @@ export function handleMockRequest(
     return ok(STOCK_ALERTS)
   }
   if (seg0 === 'stock' && seg1 === 'all-stores') {
-    return ok(STOCK)
+    // Build AllStoresData structure expected by stock/stores page
+    const stockByProduct = new Map<number, any>()
+    for (const s of STOCK) {
+      if (!stockByProduct.has(s.productId)) {
+        stockByProduct.set(s.productId, {
+          productId: s.productId,
+          productName: s.product.name,
+          shortCode: s.product.shortCode,
+          categories: s.product.category,
+          variations: [],
+          storeStock: {},
+        })
+      }
+      const p = stockByProduct.get(s.productId)
+      if (s.productVariationId) {
+        const existing = p.variations.find((v: any) => v.id === s.productVariationId)
+        if (existing) {
+          existing.stores[s.store.name] = s.quantity
+        } else {
+          p.variations.push({
+            id: s.productVariationId,
+            shortCode: `${s.product.shortCode}-${s.productVariation?.size}${s.productVariation?.length ? '/' + s.productVariation.length : ''}`,
+            size: s.productVariation?.size || '',
+            length: s.productVariation?.length || null,
+            stores: { [s.store.name]: s.quantity },
+          })
+        }
+      } else {
+        p.storeStock[s.store.name] = (p.storeStock[s.store.name] || 0) + s.quantity
+      }
+    }
+    return ok({
+      stores: STORES.map(s => ({ id: s.id, name: s.name, slug: s.slug })),
+      stock: Array.from(stockByProduct.values()),
+    })
   }
   if (seg0 === 'stock' && seg1 === 'store' && seg2 && seg3 === 'products') {
     return ok(getPOSProducts(seg2))
@@ -234,16 +321,37 @@ export function handleMockRequest(
   }
   if (seg0 === 'production-requests' && seg1) {
     const pr = PRODUCTION_REQUESTS.find(p => p.id === seg1) || PRODUCTION_REQUESTS[0]
-    return ok(pr)
+    return ok(normalizePR(pr))
   }
   if (seg0 === 'production-requests') {
-    return { success: true, data: PRODUCTION_REQUESTS, pagination: { total: PRODUCTION_REQUESTS.length, page: 1, limit: 20, totalPages: 1 } }
+    const normalized = PRODUCTION_REQUESTS.map(normalizePR)
+    return { success: true, data: normalized, pagination: { total: normalized.length, page: 1, limit: 20, totalPages: 1 } }
   }
 
   // ── In-Store Sales (POS) ──────────────────────────────────
   if (seg0 === 'in-store-sales') {
     if (method === 'POST') {
       return ok({ id: 'sale-demo', message: 'Vente enregistrée' })
+    }
+    if (seg1 === 'stores-summary') {
+      // Used by /magasins page
+      const storesSummary = STORES.map(store => {
+        const sales = POS_DAILY_SUMMARY.filter(s => s.storeId === store.id)
+        const totalAmount = sales.reduce((sum, s) => sum + s.totalRevenue, 0)
+        const totalCount = sales.reduce((sum, s) => sum + s.totalSales, 0)
+        return {
+          id: store.id, name: store.name, slug: store.slug,
+          sales: { count: totalCount, totalAmount, avgBasket: totalCount ? Math.round(totalAmount / totalCount) : 0 },
+          returns: { count: 2 },
+        }
+      })
+      const totalAmount = storesSummary.reduce((s, st) => s + st.sales.totalAmount, 0)
+      const totalCount = storesSummary.reduce((s, st) => s + st.sales.count, 0)
+      return ok({
+        period: { startDate: '2026-02-25', endDate: '2026-03-27' },
+        stores: storesSummary,
+        totals: { salesCount: totalCount, salesAmount: totalAmount, returnsCount: 4, avgBasket: totalCount ? Math.round(totalAmount / totalCount) : 0 },
+      })
     }
     if (seg1 === 'summary') {
       const storeSlug = seg2 || 'casablanca-centre'
