@@ -64,11 +64,36 @@ export function handleMockRequest(
   if (seg0 === 'orders' && seg1 === 'stats') {
     return ok(ORDER_STATS)
   }
-  if (seg0 === 'orders' && seg1 === 'analytics') {
-    return ok(ANALYTICS_DATA)
-  }
-  if (seg0 === 'orders' && seg1 === 'admin-analytics') {
-    return ok(ANALYTICS_DATA)
+  if (seg0 === 'orders' && (seg1 === 'analytics' || seg1 === 'admin-analytics')) {
+    return ok({
+      ...ANALYTICS_DATA,
+      monthlyData: [
+        { month: 'Oct', orders: 18, revenue: 7200 },
+        { month: 'Nov', orders: 24, revenue: 9600 },
+        { month: 'Déc', orders: 31, revenue: 12400 },
+        { month: 'Jan', orders: 22, revenue: 8800 },
+        { month: 'Fév', orders: 28, revenue: 11200 },
+        { month: 'Mar', orders: 30, revenue: 12100 },
+      ],
+      sourceBreakdown: [
+        { source: 'WOOCOMMERCE', count: 18, revenue: 7560 },
+        { source: 'MANUAL',      count: 12, revenue: 4540 },
+      ],
+      staffPerformance: [
+        { staffName: 'Fatima Benali', orders: 14, revenue: 5600 },
+        { staffName: 'Omar Chakir',   orders: 16, revenue: 6500 },
+      ],
+      storePerformance: [
+        { storeName: 'Casablanca Centre', sales: 380, revenue: 48200 },
+        { storeName: 'Rabat Agdal',       sales: 260, revenue: 31400 },
+      ],
+      deliveryStats: [
+        { status: 'DELIVERED', count: 10, percentage: 72 },
+        { status: 'RETURNED',  count: 2,  percentage: 8  },
+        { status: 'CANCELLED', count: 3,  percentage: 10 },
+        { status: 'PENDING',   count: 5,  percentage: 10 },
+      ],
+    })
   }
   if (seg0 === 'orders' && seg1 && !['stats', 'analytics', 'admin-analytics', 'all'].includes(seg1)) {
     // Single order by ID
@@ -195,7 +220,7 @@ export function handleMockRequest(
     return ok(shipment)
   }
   if (seg0 === 'shipments') {
-    return ok({ shipments: SHIPMENTS, total: SHIPMENTS.length })
+    return { success: true, data: SHIPMENTS, pagination: { total: SHIPMENTS.length, page: 1, limit: 20, totalPages: 1 } }
   }
 
   // ── Production Requests ───────────────────────────────────
@@ -212,7 +237,7 @@ export function handleMockRequest(
     return ok(pr)
   }
   if (seg0 === 'production-requests') {
-    return ok({ requests: PRODUCTION_REQUESTS, total: PRODUCTION_REQUESTS.length })
+    return { success: true, data: PRODUCTION_REQUESTS, pagination: { total: PRODUCTION_REQUESTS.length, page: 1, limit: 20, totalPages: 1 } }
   }
 
   // ── In-Store Sales (POS) ──────────────────────────────────
